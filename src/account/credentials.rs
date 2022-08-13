@@ -9,10 +9,6 @@ impl Credentials {
         Credentials { username, password }
     }
 
-    pub fn to_string(&self) -> String {
-        format!("{} {}", self.username, self.password)
-    }
-
     pub fn username(&self) -> &String {
         &self.username
     }

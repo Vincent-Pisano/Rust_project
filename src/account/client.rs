@@ -2,28 +2,34 @@ use super::credentials::*;
 
 // #[derive(Default)] utilise seulement si valeur de base dans la struct | les ajout automatiquement quand on créer le struct
 pub struct Client {
+    id: u32,
     credentials: Credentials,
-    balance: u32,
+    balance: f32,
 }
 
 impl Client {
-    pub fn new(username: String, password: String, balance: u32) -> Client {
+    pub fn new(id: u32, username: String, password: String, balance: f32) -> Client {
         let credentials = Credentials::new(username, password);
-        Client { credentials, balance }
+        Client {
+            id,
+            credentials,
+            balance,
+        }
     }
 
     pub fn to_string(&self) -> String {
-        self.credentials.to_string()
+        self.credentials.username().to_string()
     }
 
     // Immutable access.
-    fn username(&self) -> &String {
-        &self.credentials.username()
+    pub fn id(&self) -> &u32 {
+        &self.id
     }
-    fn password(&self) -> &String {
-        &&self.credentials.password()
-    }
-    fn balance(&self) -> &u32 {
+    pub fn balance(&self) -> &f32 {
         &self.balance
+    }
+    // Mutable access.
+    pub fn mut_balance(&mut self) -> &mut f32 {
+        &mut self.balance
     }
 }
