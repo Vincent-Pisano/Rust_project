@@ -1,3 +1,2 @@
-0,test,lol,69
-1,test2,lol,69
-2,test3,lol,69
+0,test,lol,500
+1,test2,lol,692,test3,lol,69

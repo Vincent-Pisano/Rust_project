@@ -1,4 +1,5 @@
 // #[derive(Default)] utilise seulement si valeur de base dans la struct | les ajout automatiquement quand on créer le struct
+#[derive(Clone)]
 pub struct Credentials {
     username: String,
     password: String,

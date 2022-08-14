@@ -1,6 +1,7 @@
 use super::credentials::*;
 
 // #[derive(Default)] utilise seulement si valeur de base dans la struct | les ajout automatiquement quand on créer le struct
+#[derive(Clone)]
 pub struct Client {
     id: u32,
     credentials: Credentials,
@@ -31,5 +32,10 @@ impl Client {
     // Mutable access.
     pub fn mut_balance(&mut self) -> &mut f32 {
         &mut self.balance
+    }
+
+    //setters
+    pub fn set_balance(&mut self, new_balance: f32) {
+        self.balance = new_balance;
     }
 }
