@@ -164,7 +164,7 @@ fn modify_balance(id: u32, new_balance: f32) {
         .for_each(|mut client| {
             let client_id: u32 = client[POS_CLIENT_ID].clone().parse::<u32>().unwrap();
             if client_id == id {
-                client[POS_BALANCE] = &balance_string.as_str();
+                client[POS_BALANCE] = balance_string.clone();
             }
 
             let mut data_string = String::new();
@@ -180,7 +180,7 @@ fn modify_balance(id: u32, new_balance: f32) {
 }
 
 //
-fn get_all_clients_as_vector() -> Vec<Vec<&'static str>> {
+fn get_all_clients_as_vector() -> Vec<Vec<String>> {
     let mut file_to_read = File::open(PATH).expect("File not found");
     let mut data = String::new();
     file_to_read
@@ -188,9 +188,9 @@ fn get_all_clients_as_vector() -> Vec<Vec<&'static str>> {
         .expect("Error while reading file");
     let mut data_vector: Vec<&str> = data.split('\n').collect();
     data_vector.pop();
-    let mut data_vector_clients: Vec<Vec<&str>> = Vec::new();
+    let mut data_vector_clients: Vec<Vec<String>> = Vec::new();
     for client_str in data_vector.iter() {
-        let data_client: Vec<&str> = client_str.split(',').collect();
+        let data_client: Vec<String> = client_str.split(',').map(|s| s.to_string()).collect();
         data_vector_clients.push(data_client.clone());
     }
     data_vector_clients //à corriger
