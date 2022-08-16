@@ -4,22 +4,25 @@ use std::env;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io;
+use std::io::prelude::*;
 use std::io::{BufRead, BufReader, Error, Write};
+use std::iter::Enumerate;
+use std::ops::ControlFlow;
 use std::path::Path;
 use std::process;
 
-use std::io::prelude::*;
-
 mod account;
+use crate::account::client::*;
 
 static PATH: &str = "very_secure_info.txt";
 
-use crate::account::client::*;
+static POS_CLIENT_ID: usize = 0;
+static POS_USERNAME: usize = 1;
+static POS_PASSWORD: usize = 2;
+static POS_BALANCE: usize = 3;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-
-    //modify_balance(0, 420f32);
 
     check_if_login(if is_trying_to_log_in(args.clone()) {
         enter_password(args[2].clone())
@@ -29,16 +32,11 @@ fn main() {
 }
 
 fn enter_password(username: String) -> Option<Client> {
-    print!("Enter your password: \n");
-    let mut password = String::new();
-    io::stdin()
-        .read_line(&mut password)
-        .ok()
-        .expect("Failed to read the line");
+    let mut password = ask_input("password");
 
-    match verify_credentials(username, password.clone()) {
+    match verify_credentials(&username, &password) {
         None => {
-            println!("No account were found with those credentials...\nPlease Sign up");
+            println!("No account was found with those credentials...\nPlease Sign up");
             None
         }
         Some(optional_client) => Some(optional_client),
@@ -62,40 +60,31 @@ fn check_if_login(optional_client: Option<Client>) {
     show_menu(client)
 }
 
+fn ask_input(input_name: &str) -> String {
+    print!("Enter your {}: \n", input_name);
+    let msg = format!("Failed to read the {}", input_name);
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).ok().expect(&msg);
+    input
+}
+
 fn sign_up() -> Client {
     create_data_file();
+    let username = ask_input("username");
+    let password = ask_input("password");
 
-    print!("Enter your username: \n");
-    let mut username = String::new();
-    io::stdin()
-        .read_line(&mut username)
-        .ok()
-        .expect("Failed to read the line");
-
-    print!("Enter your password: \n");
-    let mut password = String::new();
-    io::stdin()
-        .read_line(&mut password)
-        .ok()
-        .expect("Failed to read the line");
-
-    match verify_credentials(username.clone(), password.clone()) {
+    match verify_credentials(&username, &password) {
         None => {
-            print!("Enter your balance: \n");
-            let mut balance = String::new();
-            io::stdin()
-                .read_line(&mut balance)
-                .ok()
-                .expect("Failed to read the line");
+            let mut balance = ask_input("balance");
 
-            write_to_file(
+            register_new_client(
                 String::from(username.trim()),
                 String::from(password.trim()),
                 String::from(balance.trim()),
             )
         }
         Some(optional_client) => {
-            println!("Oops, it seems that the username is already taken...");
+            println!("Oops, it seems that username is already taken...");
             sign_up()
         }
     }
@@ -113,13 +102,8 @@ fn create_data_file() {
     }
 }
 
-fn write_to_file(username: String, password: String, balance: String) -> Client {
-    let file_cnt = BufReader::new(File::open(PATH).expect("Unable to open file"));
-    let mut cnt = 0;
-
-    for _ in file_cnt.lines() {
-        cnt = cnt + 1;
-    }
+fn register_new_client(username: String, password: String, balance: String) -> Client {
+    let mut new_id = read_lines(PATH).count() + 1;
 
     let mut file = OpenOptions::new()
         .write(true)
@@ -127,83 +111,92 @@ fn write_to_file(username: String, password: String, balance: String) -> Client 
         .open(PATH)
         .unwrap();
 
-    let data_string: String = format!("{},{},{},{}", cnt, username, password, balance);
+    let data_string: String = format!("{},{},{},{}", new_id, username, password, balance);
 
     if let Err(e) = writeln!(file, "{}", data_string) {
         eprintln!("Couldn't write to file: {}", e);
     }
 
-    Client::new(cnt, username, password, balance.parse().unwrap())
+    Client::new(new_id as u32, username, password, balance.parse().unwrap())
 }
 
-fn verify_credentials(username: String, password: String) -> Option<Client> {
-    let file_to_read = File::open(PATH).unwrap();
-    let reader = BufReader::new(file_to_read);
+fn verify_credentials(username: &str, password: &str) -> Option<Client> {
     let mut opt_client: Option<Client> = None;
 
-    for (index, line) in reader.lines().enumerate() {
-        let line = line.unwrap();
-        let data_v: Vec<&str> = line.split(',').collect();
+    for (index, line) in read_lines(PATH) {
+        if let Ok(client_str) = line {
+            let line_vect: Vec<&str> = client_str.split(',').collect();
 
-        if data_v[1].to_string() == username.trim() && data_v[2].to_string() == password.trim() {
-            opt_client = Some(Client::new(
-                data_v[0].parse().unwrap(),
-                username,
-                password,
-                data_v[3].parse().unwrap(),
-            ));
-            break;
+            let username_file: &str = line_vect[POS_USERNAME];
+            let password_file: &str = line_vect[POS_PASSWORD];
+
+            if username_file == username.trim() && password_file == password.trim() {
+                let client_id: u32 = line_vect[POS_CLIENT_ID].parse().unwrap();
+                let balance: f32 = line_vect[POS_BALANCE].parse().unwrap();
+
+                opt_client = Some(Client::new(
+                    client_id,
+                    String::from(username),
+                    String::from(password),
+                    balance,
+                ));
+                break;
+            }
         }
     }
     opt_client
 }
 
-fn modify_balance(id: u32, new_balance: f32) {
-    let mut file_to_read = File::open(PATH).expect("File not found");
+fn read_lines<P>(filename: P) -> Enumerate<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename).unwrap();
+    io::BufReader::new(file).lines().enumerate()
+}
 
+fn modify_balance(id: u32, new_balance: f32) {
+    let mut new_data = String::new();
+    let balance_string = new_balance.to_string() + "\n";
+
+    get_all_clients_as_vector()
+        .into_iter()
+        .for_each(|mut client| {
+            let client_id: u32 = client[POS_CLIENT_ID].clone().parse::<u32>().unwrap();
+            if client_id == id {
+                client[POS_BALANCE] = &balance_string.as_str();
+            }
+
+            let mut data_string = String::new();
+            for (index, mut data_str) in client.iter().enumerate() {
+                data_string = data_str.to_string();
+                if index != client.len() - 1 {
+                    data_string.push_str(",");
+                }
+                new_data.push_str(data_string.as_str());
+            }
+        });
+    save_changes(new_data);
+}
+
+//
+fn get_all_clients_as_vector() -> Vec<Vec<&'static str>> {
+    let mut file_to_read = File::open(PATH).expect("File not found");
     let mut data = String::new();
     file_to_read
         .read_to_string(&mut data)
         .expect("Error while reading file");
-
-    let mut data_v: Vec<&str> = data.split('\n').collect();
-    data_v.pop();
-
-    // changer la reference de data vers new apres la modif
-    let mut data_v2: Vec<Vec<&str>> = Vec::new();
-    for client_str in data_v.iter() {
-        let data: Vec<&str> = client_str.split(',').collect();
-        data_v2.push(data.clone());
+    let mut data_vector: Vec<&str> = data.split('\n').collect();
+    data_vector.pop();
+    let mut data_vector_clients: Vec<Vec<&str>> = Vec::new();
+    for client_str in data_vector.iter() {
+        let data_client: Vec<&str> = client_str.split(',').collect();
+        data_vector_clients.push(data_client.clone());
     }
-    let mut new_data = String::new();
+    data_vector_clients //à corriger
+}
 
-    let mut balance_string: String = new_balance.to_string();
-    balance_string.push_str("\n");
-
-    //client est un vecteur
-    data_v2.into_iter().for_each(|mut client| {
-        if client[0].parse::<u32>().unwrap() == id {
-            client[3] = balance_string.as_str();
-        }
-        //println!("{:?}", client);
-        let mut data_string = String::new();
-
-        for (index, mut data_str) in client.iter().enumerate() {
-            data_string = data_str.to_string();
-            if index != client.len() -1 {
-                data_string.push_str(",");
-            } 
-            new_data.push_str(data_string.as_str());
-        }
-    });
-
-    let file_cnt = BufReader::new(File::open(PATH).expect("Unable to open file"));
-    let mut cnt = 0;
-
-    for _ in file_cnt.lines() {
-        cnt = cnt + 1;
-    }
-
+fn save_changes(new_data: String) {
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
@@ -213,7 +206,6 @@ fn modify_balance(id: u32, new_balance: f32) {
     if let Err(e) = writeln!(file, "{}", new_data) {
         eprintln!("Couldn't write to file: {}", e);
     }
-
 }
 
 fn show_menu(mut client: Client) {
@@ -221,24 +213,18 @@ fn show_menu(mut client: Client) {
     println!("Hello {} !", client.to_string());
     loop {
         println!(
-            "\nWhat Would you like to do today ?
+            "\nWhat Would you like to do today?
         1. Check your balance
         2. Make a deposit
         3. Make a withdrawal
         Q. Swallow your tears and leave you poor fuck",
         );
-        client = enter_option(client.clone());
+        client = enter_menu_option(client);
     }
 }
 
-fn enter_option(mut client: Client) -> Client {
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .ok()
-        .expect("Failed to read the line");
-
-    match input.to_ascii_lowercase().as_str().trim() {
+fn enter_menu_option(mut client: Client) -> Client {
+    match ask_input("line").to_ascii_lowercase().as_str().trim() {
         "1" => {
             println!("You currently have {}$", client.balance());
         }
@@ -255,7 +241,7 @@ fn enter_option(mut client: Client) -> Client {
             process::exit(0);
         }
         _ => {
-            println!("That's not a valid choice");
+            println!("That's not a valid choice...");
         }
     };
     client
@@ -266,37 +252,35 @@ enum Operations {
     Subtract,
 }
 
-fn enter_amount_to_modify(mut client: Client, operation: Operations) -> Client{
-    let mut input = String::new();
-    
-    io::stdin()
-        .read_line(&mut input)
-        .ok()
-        .expect("Failed to read the line");
-    let amount: f32 = input.trim().parse::<f32>().unwrap_or(-1f32);
-    
-    if amount > 0f32 {
-        match operation {
-            Operations::Add => {
-                modify_balance(*client.id(), *client.balance() + amount);
-                client.set_balance(*client.balance() + amount);
-                client
-            }
-            Operations::Subtract => {
-                if *client.balance() >= amount {
-                    modify_balance(*client.id(), *client.balance() - amount);
-                    client.set_balance(*client.balance() - amount);
-                } else {
-                    println!(
-                            "It seems that you do not have the required money...\nYour current balance is {}$",
-                            *client.balance()
-                        )
-                }
-                client
-            },
-        } 
-    } else {
-        println!("The entered value was invalid... Please enter a number above 0");
-        client
+fn enter_amount_to_modify(mut client: Client, operation: Operations) -> Client {
+    let amount: f32 = ask_input("amount").trim().parse::<f32>().unwrap_or(-1f32);
+    match amount > 0f32 {
+        true => match operation {
+            Operations::Add => add_amount_to_balance(client, amount),
+            Operations::Subtract => remove_amount_from_balance(client, amount),
+        },
+        false => {
+            println!("The entered value was invalid... Please enter a number above 0");
+            client //return unchanged client
+        }
     }
+}
+
+fn add_amount_to_balance(mut client: Client, amount: f32) -> Client {
+    modify_balance(*client.id(), *client.balance() + amount);
+    client.set_balance(*client.balance() + amount);
+    client
+}
+
+fn remove_amount_from_balance(mut client: Client, amount: f32) -> Client {
+    if *client.balance() >= amount {
+        modify_balance(*client.id(), *client.balance() - amount);
+        client.set_balance(*client.balance() - amount);
+    } else {
+        println!(
+            "It seems that you do not have the required money...\nYour current balance is {}$",
+            *client.balance()
+        )
+    }
+    client
 }
