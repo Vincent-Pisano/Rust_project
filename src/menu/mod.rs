@@ -1,4 +1,5 @@
 use crate::account::client::*;
+use crate::account::credentials::*;
 
 pub fn show_menu(mut client: Client) {
     crate::menu::menu::show_menu(client)
@@ -17,6 +18,7 @@ mod menu {
     use std::process;
 
     use crate::account::client::*;
+    use crate::account::credentials::Credentials;
     use crate::database::*;
 
     enum Operations {
@@ -79,14 +81,14 @@ mod menu {
     }
 
     fn add_amount_to_balance(mut client: Client, amount: f32) -> Client {
-        modify_balance(*client.id(), *client.balance() + amount);
+        modify_balance(client.credentials(), *client.balance() + amount);
         client.set_balance(*client.balance() + amount);
         client
     }
 
     fn remove_amount_from_balance(mut client: Client, amount: f32) -> Client {
         if *client.balance() >= amount {
-            modify_balance(*client.id(), *client.balance() - amount);
+            modify_balance(client.credentials(), *client.balance() - amount);
             client.set_balance(*client.balance() - amount);
         } else {
             println!(
@@ -103,14 +105,15 @@ mod menu {
         let username = ask_input("username");
         let password = ask_input("password");
 
-        match verify_credentials(&username, &password) {
+        let credentials = &Credentials::new(username.trim().to_string(), password.trim().to_string());
+
+        match verify_credentials(credentials) {
             None => {
                 let mut balance = ask_input("balance");
 
                 register_new_client(
-                    String::from(username.trim()),
-                    String::from(password.trim()),
-                    String::from(balance.trim()),
+                    credentials,
+                    balance.trim().to_string(),
                 )
             }
             Some(optional_client) => {
@@ -125,7 +128,7 @@ mod menu {
     pub fn enter_password(username: &String) -> Option<Client> {
         let mut password = ask_input("password");
 
-        match verify_credentials(&username, &password) {
+        match verify_credentials(&Credentials::new(username.trim().to_string(), password.trim().to_string())) {
             None => {
                 println!("No account was found with those credentials...\nPlease Sign up");
                 None

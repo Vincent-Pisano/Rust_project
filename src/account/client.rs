@@ -1,18 +1,20 @@
 use super::credentials::*;
+use mongodb::{
+    bson::doc,
+    sync::Client as MongoClient,
+};
 
 // #[derive(Default)] utilise seulement si valeur de base dans la struct | les ajout automatiquement quand on créer le struct
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Client {
-    id: u32,
     credentials: Credentials,
     balance: f32,
 }
 
 impl Client {
-    pub fn new(id: u32, username: String, password: String, balance: f32) -> Client {
+    pub fn new(username: String, password: String, balance: f32) -> Client {
         let credentials = Credentials::new(username, password);
         Client {
-            id,
             credentials,
             balance,
         }
@@ -23,8 +25,11 @@ impl Client {
     }
 
     // Immutable access.
-    pub fn id(&self) -> &u32 {
-        &self.id
+    pub fn username(&self) -> &String {
+        &self.credentials.username()
+    }
+    pub fn credentials(&self) -> &Credentials {
+        &self.credentials
     }
     pub fn balance(&self) -> &f32 {
         &self.balance

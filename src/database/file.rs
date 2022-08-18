@@ -10,37 +10,44 @@ use std::path::Path;
 use std::process;
 
 use crate::account::client::*;
+use crate::account::credentials::*;
 
 static PATH: &str = "very_secure_info.txt";
 
-static POS_CLIENT_ID: usize = 0;
-static POS_USERNAME: usize = 1;
-static POS_PASSWORD: usize = 2;
-static POS_BALANCE: usize = 3;
+static POS_USERNAME: usize = 0;
+static POS_PASSWORD: usize = 1;
+static POS_BALANCE: usize = 2;
 
 // START MODIFY BALANCE
 
-pub fn modify_balance(id: u32, new_balance: f32) {
+pub fn modify_balance(credentials: &Credentials, new_balance: f32) {
     let mut new_data = String::new();
-    let balance_string = new_balance.to_string() + "\n";
+    let balance_string = new_balance.to_string();
 
     get_all_clients_as_vector()
         .into_iter()
         .for_each(|mut client| {
-            let client_id: u32 = client[POS_CLIENT_ID].clone().parse::<u32>().unwrap();
-            if client_id == id {
+            let client_username: String = client[POS_USERNAME].clone();
+            let client_password: String = client[POS_PASSWORD].clone();
+
+            if &client_username == credentials.username() && &client_password == credentials.password() {
                 client[POS_BALANCE] = balance_string.clone();
             }
 
             let mut data_string = String::new();
             for (index, mut data_str) in client.iter().enumerate() {
                 data_string = data_str.to_string();
+                
                 if index != client.len() - 1 {
                     data_string.push_str(",");
+                }
+                else {
+                    data_string.push_str("\n");
                 }
                 new_data.push_str(data_string.as_str());
             }
         });
+    new_data.pop(); // delete last \n
     save_changes(new_data);
 }
 
@@ -74,7 +81,7 @@ fn save_changes(new_data: String) {
 
 // VERIFY CREDENTIALS
 
-pub fn verify_credentials(username: &str, password: &str) -> Option<Client> {
+pub fn verify_credentials(credentials: &Credentials) -> Option<Client> {
     create_data_file();
 
     let mut opt_client: Option<Client> = None;
@@ -86,14 +93,12 @@ pub fn verify_credentials(username: &str, password: &str) -> Option<Client> {
             let username_file: &str = line_vect[POS_USERNAME];
             let password_file: &str = line_vect[POS_PASSWORD];
 
-            if username_file == username.trim() && password_file == password.trim() {
-                let client_id: u32 = line_vect[POS_CLIENT_ID].parse().unwrap();
+            if username_file == credentials.username().trim() && password_file == credentials.password().trim() {
                 let balance: f32 = line_vect[POS_BALANCE].parse().unwrap();
 
                 opt_client = Some(Client::new(
-                    client_id,
-                    String::from(username),
-                    String::from(password),
+                    String::from(credentials.username()),
+                    String::from(credentials.password()),
                     balance,
                 ));
                 break;
@@ -117,22 +122,20 @@ fn create_data_file() {
 
 // SIGN_UP
 
-pub fn register_new_client(username: String, password: String, balance: String) -> Client {
-    let mut new_id = read_lines(PATH).count() + 1;
-
+pub fn register_new_client(credentials: &Credentials, balance: String) -> Client {
     let mut file = OpenOptions::new()
         .write(true)
         .append(true)
         .open(PATH)
         .unwrap();
 
-    let data_string: String = format!("{},{},{},{}", new_id, username, password, balance);
+    let data_string: String = format!("{},{},{}", credentials.username(), credentials.password(), balance);
 
     if let Err(e) = writeln!(file, "{}", data_string) {
         eprintln!("Couldn't write to file: {}", e);
     }
 
-    Client::new(new_id as u32, username, password, balance.parse().unwrap())
+    Client::new(credentials.username().clone(), credentials.password().clone(), balance.parse().unwrap())
 }
 
 // SUPPLEMENT

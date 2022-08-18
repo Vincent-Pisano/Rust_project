@@ -780,6 +780,7 @@ name = "rust_project"
 version = "0.1.0"
 dependencies = [
  "mongodb",
+ "serde",
 ]
 
 [[package]]
